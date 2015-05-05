@@ -18,16 +18,7 @@ package org.springframework.cloud.netflix.zuul.filters.route;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.Socket;
 import java.net.URL;
-import java.net.UnknownHostException;
-import java.security.KeyManagementException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -36,9 +27,6 @@ import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.PreDestroy;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -48,24 +36,20 @@ import org.apache.http.Header;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
+import org.apache.http.ProtocolException;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.RedirectStrategy;
+import org.apache.http.client.config.CookieSpecs;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.params.ClientPNames;
-import org.apache.http.conn.ClientConnectionManager;
-import org.apache.http.conn.scheme.PlainSocketFactory;
-import org.apache.http.conn.scheme.Scheme;
-import org.apache.http.conn.scheme.SchemeRegistry;
-import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.entity.InputStreamEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
-import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
+import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicHttpRequest;
-import org.apache.http.params.CoreConnectionPNames;
-import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.HttpContext;
 import org.springframework.cloud.netflix.zuul.filters.ProxyRequestHelper;
 import org.springframework.util.LinkedMultiValueMap;
@@ -296,23 +280,6 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 				revertHeaders(response.getAllHeaders()));
 	}
 
-	private static ClientConnectionManager newConnectionManager() throws Exception {
-		KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-		trustStore.load(null, null);
-		SSLSocketFactory sf = new MySSLSocketFactory(trustStore);
-		sf.setHostnameVerifier(SSLSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER);
-		SchemeRegistry registry = new SchemeRegistry();
-		registry.register(new Scheme("http", PlainSocketFactory.getSocketFactory(), 80));
-		registry.register(new Scheme("https", sf, 443));
-		registry.register(new Scheme("https", sf, 8443));
-		ThreadSafeClientConnManager cm = new ThreadSafeClientConnManager(registry);
-		cm.setMaxTotal(Integer.parseInt(System.getProperty("zuul.max.host.connections",
-				"200")));
-		cm.setDefaultMaxPerRoute(Integer.parseInt(System.getProperty(
-				"zuul.max.host.connections", "20")));
-		return cm;
-	}
-
 	private static void loadClient() {
 		final HttpClient oldClient = CLIENT.get();
 		CLIENT.set(newClient());
@@ -332,82 +299,43 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 	}
 
 	private static HttpClient newClient() {
-		// I could statically cache the connection manager but we will probably want to
-		// make some of its properties
-		// dynamic in the near future also
 		try {
-			DefaultHttpClient httpclient = new DefaultHttpClient(newConnectionManager());
-			HttpParams httpParams = httpclient.getParams();
-			httpParams.setIntParameter(CoreConnectionPNames.SO_TIMEOUT,
-					SOCKET_TIMEOUT.get());
-			httpParams.setIntParameter(CoreConnectionPNames.CONNECTION_TIMEOUT,
-					CONNECTION_TIMEOUT.get());
-			httpclient.setHttpRequestRetryHandler(new DefaultHttpRequestRetryHandler(0,
-					false));
-			httpParams.setParameter(ClientPNames.COOKIE_POLICY,
-					org.apache.http.client.params.CookiePolicy.IGNORE_COOKIES);
-			httpclient.setRedirectStrategy(new org.apache.http.client.RedirectStrategy() {
-				@Override
-				public boolean isRedirected(HttpRequest httpRequest,
-						HttpResponse httpResponse, HttpContext httpContext) {
-					return false;
-				}
+			return HttpClients
+					.custom()
+					.setDefaultRequestConfig(
+							RequestConfig.custom().setSocketTimeout(SOCKET_TIMEOUT.get())
+									.setConnectTimeout(CONNECTION_TIMEOUT.get())
+									.setCookieSpec(CookieSpecs.IGNORE_COOKIES).build())
+					.setRetryHandler(new DefaultHttpRequestRetryHandler(0, false))
+					.setRedirectStrategy(new RedirectStrategy() {
 
-				@Override
-				public org.apache.http.client.methods.HttpUriRequest getRedirect(
-						HttpRequest httpRequest, HttpResponse httpResponse,
-						HttpContext httpContext) {
-					return null;
-				}
-			});
-			return httpclient;
+						@Override
+						public boolean isRedirected(HttpRequest request,
+								HttpResponse response, HttpContext context)
+								throws ProtocolException {
+							// TODO Auto-generated method stub
+							return false;
+						}
+
+						@Override
+						public HttpUriRequest getRedirect(HttpRequest request,
+								HttpResponse response, HttpContext context)
+								throws ProtocolException {
+							// TODO Auto-generated method stub
+							return null;
+						}
+					})
+					.setMaxConnTotal(
+							Integer.parseInt(System.getProperty(
+									"zuul.max.host.connections", "200")))
+					.setMaxConnPerRoute(
+							Integer.parseInt(System.getProperty(
+									"zuul.max.host.connections", "20")))
+					.useSystemProperties().build();
 		}
 		catch (Exception ex) {
 			throw new RuntimeException(ex);
 		}
-	}
-
-	public static class MySSLSocketFactory extends SSLSocketFactory {
-		private SSLContext sslContext = SSLContext.getInstance("TLS");
-
-		public MySSLSocketFactory(KeyStore truststore) throws NoSuchAlgorithmException,
-				KeyManagementException, KeyStoreException, UnrecoverableKeyException {
-			super(truststore);
-			TrustManager tm = new X509TrustManager() {
-
-				@Override
-				public void checkClientTrusted(X509Certificate[] chain, String authType)
-						throws CertificateException {
-				}
-
-				@Override
-				public void checkServerTrusted(X509Certificate[] chain, String authType)
-						throws CertificateException {
-				}
-
-				@Override
-				public X509Certificate[] getAcceptedIssuers() {
-					return null;
-				}
-
-			};
-			TrustManager[] tms = new TrustManager[1];
-			tms[0] = tm;
-			this.sslContext.init(null, tms, null);
-		}
-
-		@Override
-		public Socket createSocket(Socket socket, String host, int port, boolean autoClose)
-				throws IOException, UnknownHostException {
-			return this.sslContext.getSocketFactory().createSocket(socket, host, port,
-					autoClose);
-		}
-
-		@Override
-		public Socket createSocket() throws IOException {
-			return this.sslContext.getSocketFactory().createSocket();
-		}
-
 	}
 
 }
