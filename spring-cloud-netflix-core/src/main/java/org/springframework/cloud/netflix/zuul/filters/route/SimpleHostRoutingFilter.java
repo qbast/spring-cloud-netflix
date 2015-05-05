@@ -26,6 +26,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -45,12 +46,16 @@ import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.conn.socket.LayeredConnectionSocketFactory;
+import org.apache.http.conn.ssl.X509HostnameVerifier;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicHttpRequest;
 import org.apache.http.protocol.HttpContext;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.netflix.zuul.filters.ProxyRequestHelper;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -67,49 +72,33 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 
 	public static final String CONTENT_ENCODING = "Content-Encoding";
 
-	private static final Runnable CLIENTLOADER = new Runnable() {
+	private final Runnable clientloader = new Runnable() {
 		@Override
 		public void run() {
 			loadClient();
 		}
 	};
 
-	private static final DynamicIntProperty SOCKET_TIMEOUT = DynamicPropertyFactory
+	private final DynamicIntProperty socketTimeout = DynamicPropertyFactory
 			.getInstance().getIntProperty(ZuulConstants.ZUUL_HOST_SOCKET_TIMEOUT_MILLIS,
 					10000);
 
-	private static final DynamicIntProperty CONNECTION_TIMEOUT = DynamicPropertyFactory
+	private final DynamicIntProperty connectionTimeout = DynamicPropertyFactory
 			.getInstance().getIntProperty(ZuulConstants.ZUUL_HOST_CONNECT_TIMEOUT_MILLIS,
 					2000);
 
-	private static final AtomicReference<HttpClient> CLIENT = new AtomicReference<HttpClient>(
-			newClient());
+	private final AtomicReference<HttpClient> client = new AtomicReference<>();
 
-	private static final Timer CONNECTION_MANAGER_TIMER = new Timer(
-			"SimpleHostRoutingFilter.CONNECTION_MANAGER_TIMER", true);
-
-	// cleans expired connections at an interval
-	static {
-		SOCKET_TIMEOUT.addCallback(CLIENTLOADER);
-		CONNECTION_TIMEOUT.addCallback(CLIENTLOADER);
-		CONNECTION_MANAGER_TIMER.schedule(new TimerTask() {
-			@Override
-			public void run() {
-				try {
-					final HttpClient hc = CLIENT.get();
-					if (hc == null) {
-						return;
-					}
-					hc.getConnectionManager().closeExpiredConnections();
-				}
-				catch (Throwable ex) {
-					log.error("error closing expired connections", ex);
-				}
-			}
-		}, 30000, 5000);
-	}
+	private final Timer connectionManagerTimer = new Timer(
+			"SimpleHostRoutingFilter.connectionManagerTimer", true);
 
 	private ProxyRequestHelper helper;
+
+	@Autowired(required = false)
+	private LayeredConnectionSocketFactory sslSocketFactory;
+
+	@Autowired(required = false)
+	private X509HostnameVerifier hostnameVerifier;
 
 	public SimpleHostRoutingFilter() {
 		this(new ProxyRequestHelper());
@@ -119,9 +108,31 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		this.helper = helper;
 	}
 
+	@PostConstruct
+	public void init() {
+		client.set(newClient());
+		// cleans expired connections at an interval
+		socketTimeout.addCallback(clientloader);
+		connectionTimeout.addCallback(clientloader);
+		connectionManagerTimer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				try {
+					final HttpClient hc = client.get();
+					if (hc == null) {
+						return;
+					}
+					hc.getConnectionManager().closeExpiredConnections();
+				} catch (Throwable ex) {
+					log.error("error closing expired connections", ex);
+				}
+			}
+		}, 30000, 5000);
+	}
+
 	@PreDestroy
 	public void stop() {
-		CONNECTION_MANAGER_TIMER.cancel();
+		connectionManagerTimer.cancel();
 	}
 
 	@Override
@@ -150,7 +161,7 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 				.buildZuulRequestQueryParams(request);
 		String verb = getVerb(request);
 		InputStream requestEntity = getRequestBody(request);
-		HttpClient httpclient = CLIENT.get();
+		HttpClient httpclient = client.get();
 
 		String uri = request.getRequestURI();
 		if (context.get("requestURI") != null) {
@@ -280,11 +291,11 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 				revertHeaders(response.getAllHeaders()));
 	}
 
-	private static void loadClient() {
-		final HttpClient oldClient = CLIENT.get();
-		CLIENT.set(newClient());
+	private void loadClient() {
+		final HttpClient oldClient = client.get();
+		client.set(newClient());
 		if (oldClient != null) {
-			CONNECTION_MANAGER_TIMER.schedule(new TimerTask() {
+			connectionManagerTimer.schedule(new TimerTask() {
 				@Override
 				public void run() {
 					try {
@@ -298,30 +309,28 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		}
 	}
 
-	private static HttpClient newClient() {
+	private HttpClient newClient() {
 		try {
-			return HttpClients
+			HttpClientBuilder builder = HttpClients
 					.custom()
 					.setDefaultRequestConfig(
-							RequestConfig.custom().setSocketTimeout(SOCKET_TIMEOUT.get())
-									.setConnectTimeout(CONNECTION_TIMEOUT.get())
+							RequestConfig.custom().setSocketTimeout(socketTimeout.get())
+									.setConnectTimeout(connectionTimeout.get())
 									.setCookieSpec(CookieSpecs.IGNORE_COOKIES).build())
 					.setRetryHandler(new DefaultHttpRequestRetryHandler(0, false))
 					.setRedirectStrategy(new RedirectStrategy() {
 
 						@Override
 						public boolean isRedirected(HttpRequest request,
-								HttpResponse response, HttpContext context)
+													HttpResponse response, HttpContext context)
 								throws ProtocolException {
-							// TODO Auto-generated method stub
 							return false;
 						}
 
 						@Override
 						public HttpUriRequest getRedirect(HttpRequest request,
-								HttpResponse response, HttpContext context)
+														  HttpResponse response, HttpContext context)
 								throws ProtocolException {
-							// TODO Auto-generated method stub
 							return null;
 						}
 					})
@@ -331,7 +340,15 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 					.setMaxConnPerRoute(
 							Integer.parseInt(System.getProperty(
 									"zuul.max.host.connections", "20")))
-					.useSystemProperties().build();
+					.useSystemProperties();
+
+			if (sslSocketFactory != null) {
+				builder.setSSLSocketFactory(sslSocketFactory);
+			}
+			if (hostnameVerifier != null) {
+				builder.setHostnameVerifier(hostnameVerifier);
+			}
+			return builder.build();
 		}
 		catch (Exception ex) {
 			throw new RuntimeException(ex);
