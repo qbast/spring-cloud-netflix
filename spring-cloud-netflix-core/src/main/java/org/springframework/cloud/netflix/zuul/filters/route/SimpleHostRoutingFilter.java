@@ -72,33 +72,33 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 
 	public static final String CONTENT_ENCODING = "Content-Encoding";
 
-	private final Runnable clientloader = new Runnable() {
+	protected final Runnable clientloader = new Runnable() {
 		@Override
 		public void run() {
 			loadClient();
 		}
 	};
 
-	private final DynamicIntProperty socketTimeout = DynamicPropertyFactory
+	protected final DynamicIntProperty socketTimeout = DynamicPropertyFactory
 			.getInstance().getIntProperty(ZuulConstants.ZUUL_HOST_SOCKET_TIMEOUT_MILLIS,
 					10000);
 
-	private final DynamicIntProperty connectionTimeout = DynamicPropertyFactory
+	protected final DynamicIntProperty connectionTimeout = DynamicPropertyFactory
 			.getInstance().getIntProperty(ZuulConstants.ZUUL_HOST_CONNECT_TIMEOUT_MILLIS,
 					2000);
 
-	private final AtomicReference<HttpClient> client = new AtomicReference<>();
+	protected final AtomicReference<HttpClient> client = new AtomicReference<>();
 
-	private final Timer connectionManagerTimer = new Timer(
+	protected final Timer connectionManagerTimer = new Timer(
 			"SimpleHostRoutingFilter.connectionManagerTimer", true);
 
-	private ProxyRequestHelper helper;
+	protected ProxyRequestHelper helper;
 
 	@Autowired(required = false)
-	private LayeredConnectionSocketFactory sslSocketFactory;
+	protected LayeredConnectionSocketFactory sslSocketFactory;
 
 	@Autowired(required = false)
-	private X509HostnameVerifier hostnameVerifier;
+	protected X509HostnameVerifier hostnameVerifier;
 
 	public SimpleHostRoutingFilter() {
 		this(new ProxyRequestHelper());
@@ -180,7 +180,7 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		return null;
 	}
 
-	private HttpResponse forward(HttpClient httpclient, String verb, String uri,
+	protected HttpResponse forward(HttpClient httpclient, String verb, String uri,
 			HttpServletRequest request, MultiValueMap<String, String> headers,
 			MultiValueMap<String, String> params, InputStream requestEntity)
 			throws Exception {
@@ -230,7 +230,7 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		}
 	}
 
-	private MultiValueMap<String, String> revertHeaders(Header[] headers) {
+	protected MultiValueMap<String, String> revertHeaders(Header[] headers) {
 		MultiValueMap<String, String> map = new LinkedMultiValueMap<String, String>();
 		for (Header header : headers) {
 			String name = header.getName();
@@ -242,7 +242,7 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		return map;
 	}
 
-	private Header[] convertHeaders(MultiValueMap<String, String> headers) {
+	protected Header[] convertHeaders(MultiValueMap<String, String> headers) {
 		List<Header> list = new ArrayList<>();
 		for (String name : headers.keySet()) {
 			for (String value : headers.get(name)) {
@@ -252,24 +252,24 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		return list.toArray(new BasicHeader[0]);
 	}
 
-	private HttpResponse forwardRequest(HttpClient httpclient, HttpHost httpHost,
+	protected HttpResponse forwardRequest(HttpClient httpclient, HttpHost httpHost,
 			HttpRequest httpRequest) throws IOException {
 		return httpclient.execute(httpHost, httpRequest);
 	}
 
-	private String getQueryString() {
+	protected String getQueryString() {
 		HttpServletRequest request = RequestContext.getCurrentContext().getRequest();
 		String query = request.getQueryString();
 		return (query != null) ? "?" + query : "";
 	}
 
-	private HttpHost getHttpHost(URL host) {
+	protected HttpHost getHttpHost(URL host) {
 		HttpHost httpHost = new HttpHost(host.getHost(), host.getPort(),
 				host.getProtocol());
 		return httpHost;
 	}
 
-	private InputStream getRequestBody(HttpServletRequest request) {
+	protected InputStream getRequestBody(HttpServletRequest request) {
 		InputStream requestEntity = null;
 		try {
 			requestEntity = request.getInputStream();
@@ -280,18 +280,18 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		return requestEntity;
 	}
 
-	private String getVerb(HttpServletRequest request) {
+	protected String getVerb(HttpServletRequest request) {
 		String sMethod = request.getMethod();
 		return sMethod.toUpperCase();
 	}
 
-	private void setResponse(HttpResponse response) throws IOException {
+	protected void setResponse(HttpResponse response) throws IOException {
 		this.helper.setResponse(response.getStatusLine().getStatusCode(),
 				response.getEntity() == null ? null : response.getEntity().getContent(),
 				revertHeaders(response.getAllHeaders()));
 	}
 
-	private void loadClient() {
+	protected void loadClient() {
 		final HttpClient oldClient = client.get();
 		client.set(newClient());
 		if (oldClient != null) {
@@ -309,7 +309,7 @@ public class SimpleHostRoutingFilter extends ZuulFilter {
 		}
 	}
 
-	private HttpClient newClient() {
+	protected HttpClient newClient() {
 		try {
 			HttpClientBuilder builder = HttpClients
 					.custom()
