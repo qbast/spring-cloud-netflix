@@ -16,6 +16,9 @@
 
 package org.springframework.cloud.netflix.sidecar;
 
+import com.netflix.http4.ssl.AcceptAllSocketFactory;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.X509HostnameVerifier;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.actuate.metrics.repository.InMemoryMetricRepository;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -32,6 +35,16 @@ public class SidecarApplication {
 	@Bean
 	public InMemoryMetricRepository inMemoryMetricRepository() {
 		return new InMemoryMetricRepository();
+	}
+
+	@Bean
+	public X509HostnameVerifier allowAllHostnameVerifier() {
+		return SSLConnectionSocketFactory.ALLOW_ALL_HOSTNAME_VERIFIER;
+	}
+
+	@Bean
+	public AcceptAllSocketFactory acceptAllSocketFactory() throws Exception {
+		return new AcceptAllSocketFactory();
 	}
 
 	public static void main(String[] args) {

@@ -82,8 +82,10 @@ public class ZuulConfiguration {
 
 	@Bean
 	public ServletRegistrationBean zuulServlet() {
-		return new ServletRegistrationBean(new ZuulServlet(),
+		ServletRegistrationBean registrationBean = new ServletRegistrationBean(new ZuulServlet(),
 				this.zuulProperties.getServletPattern());
+		registrationBean.setOrder(0);
+		return registrationBean;
 	}
 
 	// pre filters

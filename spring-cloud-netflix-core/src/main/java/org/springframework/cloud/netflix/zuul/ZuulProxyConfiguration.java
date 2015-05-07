@@ -21,6 +21,7 @@ import org.springframework.boot.actuate.endpoint.Endpoint;
 import org.springframework.boot.actuate.trace.TraceRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.HeartbeatMonitor;
@@ -32,6 +33,8 @@ import org.springframework.cloud.netflix.zuul.filters.ProxyRequestHelper;
 import org.springframework.cloud.netflix.zuul.filters.ProxyRouteLocator;
 import org.springframework.cloud.netflix.zuul.filters.ZuulProperties;
 import org.springframework.cloud.netflix.zuul.filters.pre.PreDecorationFilter;
+import org.springframework.cloud.netflix.zuul.filters.pre.UrlRewriteFilter;
+import org.springframework.cloud.netflix.zuul.filters.pre.UrlRewriteProperties;
 import org.springframework.cloud.netflix.zuul.filters.route.RibbonRoutingFilter;
 import org.springframework.cloud.netflix.zuul.filters.route.SimpleHostRoutingFilter;
 import org.springframework.cloud.netflix.zuul.web.ZuulHandlerMapping;
@@ -115,6 +118,22 @@ public class ZuulProxyConfiguration extends ZuulConfiguration {
 			return new RoutesEndpoint(this.routeLocator);
 		}
 
+	}
+
+	@Configuration
+	@EnableConfigurationProperties
+	@ConditionalOnClass(org.tuckey.web.filters.urlrewrite.UrlRewriteFilter.class)
+	protected static class UrlRewriteConfiguration {
+
+		@Bean
+		public UrlRewriteFilter urlRewriteFilter() {
+			return new UrlRewriteFilter(urlRewriteProperties());
+		}
+
+		@Bean
+		public UrlRewriteProperties urlRewriteProperties() {
+			return new UrlRewriteProperties();
+		}
 	}
 
 	private static class ZuulRefreshListener implements

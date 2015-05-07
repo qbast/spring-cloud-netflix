@@ -98,5 +98,10 @@
 			<artifactId>spring-cloud-config-client</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.tuckey</groupId>
+			<artifactId>urlrewritefilter</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 </project>

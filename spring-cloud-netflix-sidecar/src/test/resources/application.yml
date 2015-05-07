@@ -27,3 +27,14 @@ endpoints:
   health:
     sensitive: false
 
+zuul:
+  routes:
+    github:
+      url: https://github.com
+    self:
+      url: https://www.pcwebshop.co.uk
+    root:
+  rewrite:
+    modRewriteConfText: |
+      RewriteRule    "^/stores_old$"  "/stores" [PT]
+
