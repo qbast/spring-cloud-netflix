@@ -19,8 +19,10 @@ package org.springframework.cloud.netflix.zuul;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.endpoint.Endpoint;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.web.ErrorController;
+import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.boot.context.embedded.ServletRegistrationBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.context.scope.refresh.RefreshScopeRefreshedEvent;
@@ -58,9 +60,12 @@ public class ZuulConfiguration {
 	@Autowired(required = false)
 	private ErrorController errorController;
 
+	@Autowired
+	protected ServerProperties server;
+
 	@Bean
 	public RouteLocator routeLocator() {
-		return new SimpleRouteLocator(this.zuulProperties);
+		return new SimpleRouteLocator(this.zuulProperties, this.server.getServletPrefix());
 	}
 
 	@Bean
@@ -124,6 +129,21 @@ public class ZuulConfiguration {
 		@Bean
 		public ZuulFilterInitializer zuulFilterInitializer() {
 			return new ZuulFilterInitializer(this.filters);
+		}
+
+	}
+
+	@Configuration
+	@ConditionalOnClass(Endpoint.class)
+	protected static class RoutesEndpointConfiguration {
+
+		@Autowired
+		private RouteLocator routeLocator;
+
+		@Bean
+		// @RefreshScope
+		public RoutesEndpoint zuulEndpoint() {
+			return new RoutesEndpoint(this.routeLocator);
 		}
 
 	}

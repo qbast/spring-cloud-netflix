@@ -23,8 +23,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import lombok.extern.apachecommons.CommonsLog;
 
-import org.springframework.cloud.netflix.zuul.filters.ProxyRouteLocator;
-import org.springframework.cloud.netflix.zuul.filters.ProxyRouteLocator.ProxyRouteSpec;
+import org.springframework.cloud.netflix.zuul.filters.RouteLocator;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UrlPathHelper;
 
@@ -34,13 +33,13 @@ import com.netflix.zuul.context.RequestContext;
 @CommonsLog
 public class PreDecorationFilter extends ZuulFilter {
 
-	private ProxyRouteLocator routeLocator;
+	private RouteLocator routeLocator;
 
 	private boolean addProxyHeaders;
 
 	private UrlPathHelper urlPathHelper = new UrlPathHelper();
 
-	public PreDecorationFilter(ProxyRouteLocator routeLocator, boolean addProxyHeaders) {
+	public PreDecorationFilter(RouteLocator routeLocator, boolean addProxyHeaders) {
 		this.routeLocator = routeLocator;
 		this.addProxyHeaders = addProxyHeaders;
 	}
@@ -65,7 +64,7 @@ public class PreDecorationFilter extends ZuulFilter {
 		RequestContext ctx = RequestContext.getCurrentContext();
 		final String requestURI = this.urlPathHelper.getPathWithinApplication(ctx
 				.getRequest());
-		ProxyRouteSpec route = this.routeLocator.getMatchingRoute(requestURI);
+		RouteLocator.RouteSpec route = this.routeLocator.getMatchingRoute(requestURI);
 		if (route != null) {
 			String location = route.getLocation();
 			if (location != null) {

@@ -17,28 +17,49 @@
 package org.springframework.cloud.netflix.zuul.filters;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 
+import lombok.extern.apachecommons.CommonsLog;
 import org.springframework.cloud.netflix.zuul.filters.ZuulProperties.ZuulRoute;
 
 /**
  * @author Dave Syer
  */
-public class SimpleRouteLocator implements RouteLocator {
+@CommonsLog
+public class SimpleRouteLocator extends AbstractRouteLocator {
 
-	private ZuulProperties properties;
+	public SimpleRouteLocator(ZuulProperties properties, String servletPath) {
+		super(properties, servletPath);
+	}
 
-	public SimpleRouteLocator(ZuulProperties properties) {
-		this.properties = properties;
+	@Override
+	public Map<String, String> getRouteLocations() {
+		Map<String, String> values = new LinkedHashMap<>();
+		Map<String, ZuulRoute> zuulRoutes = getZuulRoutes();
+		for (String key : zuulRoutes.keySet()) {
+			values.put(key, zuulRoutes.get(key).getLocation());
+		}
+		return values;
 	}
 
 	@Override
 	public Collection<String> getRoutePaths() {
-		Collection<String> paths = new LinkedHashSet<String>();
+		Collection<String> paths = new LinkedHashSet<>();
 		for (ZuulRoute route : this.properties.getRoutes().values()) {
 			paths.add(route.getPath());
 		}
 		return paths;
 	}
+
+	@Override
+	protected Map<String, ZuulRoute> getZuulRoutes() {
+		Map<String, ZuulRoute> routes = new HashMap<>();
+		addConfiguredRoutes(routes);
+		return routes;
+	}
+
 
 }

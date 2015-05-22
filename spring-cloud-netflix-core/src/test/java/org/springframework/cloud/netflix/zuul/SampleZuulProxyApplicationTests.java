@@ -74,12 +74,12 @@ public class SampleZuulProxyApplicationTests {
 	@Test
 	public void bindRouteUsingPhysicalRoute() {
 		assertEquals("http://localhost:7777/local",
-				this.routes.getRoutes().get("/test/**"));
+				this.routes.getRouteLocations().get("/test/**"));
 	}
 
 	@Test
 	public void bindRouteUsingOnlyPath() {
-		assertEquals("simple", this.routes.getRoutes().get("/simple/**"));
+		assertEquals("simple", this.routes.getRouteLocations().get("/simple/**"));
 	}
 
 	@Test

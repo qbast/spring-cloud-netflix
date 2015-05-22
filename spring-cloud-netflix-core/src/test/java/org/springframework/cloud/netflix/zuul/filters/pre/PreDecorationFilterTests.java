@@ -55,8 +55,8 @@ public class PreDecorationFilterTests {
 	@Before
 	public void init() {
 		initMocks(this);
-		this.routeLocator = new ProxyRouteLocator("/", this.discovery,
-				this.properties);
+		this.routeLocator = new ProxyRouteLocator(this.discovery, this.properties, "/"
+		);
 		this.filter = new PreDecorationFilter(this.routeLocator, true);
 		RequestContext ctx = RequestContext.getCurrentContext();
 		ctx.setRequest(this.request);

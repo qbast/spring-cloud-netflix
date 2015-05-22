@@ -23,14 +23,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicReference;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.extern.apachecommons.CommonsLog;
 
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.netflix.zuul.filters.ZuulProperties.ZuulRoute;
-import org.springframework.util.AntPathMatcher;
-import org.springframework.util.PathMatcher;
 import org.springframework.util.PatternMatchUtils;
 import org.springframework.util.StringUtils;
 
@@ -38,33 +34,19 @@ import org.springframework.util.StringUtils;
  * @author Spencer Gibb
  */
 @CommonsLog
-public class ProxyRouteLocator implements RouteLocator {
+public class ProxyRouteLocator extends AbstractRouteLocator {
 
 	public static final String DEFAULT_ROUTE = "/**";
 
 	private DiscoveryClient discovery;
 
-	private ZuulProperties properties;
-
-	private PathMatcher pathMatcher = new AntPathMatcher();
-
 	private AtomicReference<Map<String, ZuulRoute>> routes = new AtomicReference<>();
 
 	private Map<String, ZuulRoute> staticRoutes = new LinkedHashMap<>();
 
-	private String servletPath;
-
-	public ProxyRouteLocator(String servletPath, DiscoveryClient discovery,
-			ZuulProperties properties) {
-	    if (StringUtils.hasText(servletPath)) { // a servletPath is passed explicitly
-	        this.servletPath = servletPath;
-	    } else {
-	        //set Zuul servlet path
-	        this.servletPath = properties.getServletPath() != null? properties.getServletPath() : "";
-	    }
-		
+	public ProxyRouteLocator(DiscoveryClient discovery, ZuulProperties properties, String servletPath) {
+		super(properties, servletPath);
 		this.discovery = discovery;
-		this.properties = properties;
 	}
 
 	public void addRoute(String path, String location) {
@@ -79,74 +61,36 @@ public class ProxyRouteLocator implements RouteLocator {
 
 	@Override
 	public Collection<String> getRoutePaths() {
-		return getRoutes().keySet();
+		return getRouteLocations().keySet();
 	}
 
-	public Map<String, String> getRoutes() {
+	@Override
+	protected Map<String, ZuulRoute> getZuulRoutes() {
+		return routes.get();
+	}
+
+	public Map<String, String> getRouteLocations() {
 		if (this.routes.get() == null) {
 			this.routes.set(locateRoutes());
 		}
 		Map<String, String> values = new LinkedHashMap<>();
 		for (String key : this.routes.get().keySet()) {
-			String url = key;
-			values.put(url, this.routes.get().get(key).getLocation());
+			values.put(key, this.routes.get().get(key).getLocation());
 		}
 		return values;
 	}
 
-	public ProxyRouteSpec getMatchingRoute(String path) {
-	    log.info("Finding route for path: " + path);	    
-	    
-		String location = null;
-		String targetPath = null;
-		String id = null;
-		String prefix = this.properties.getPrefix();
-		log.debug("servletPath=" + this.servletPath);
-		if (StringUtils.hasText(this.servletPath) && !this.servletPath.equals("/")
-				&& path.startsWith(this.servletPath)) {
-			path = path.substring(this.servletPath.length());
-		}
-		log.debug("path=" + path);
-		Boolean retryable = this.properties.getRetryable();
-		for (Entry<String, ZuulRoute> entry : this.routes.get().entrySet()) {
-			String pattern = entry.getKey();
-			log.debug("Matching pattern:" + pattern);
-			if (this.pathMatcher.match(pattern, path)) {
-				ZuulRoute route = entry.getValue();
-				id = route.getId();
-				location = route.getLocation();
-				targetPath = path;
-				if (path.startsWith(prefix) && this.properties.isStripPrefix()) {
-					targetPath = path.substring(prefix.length());
-				}
-				if (route.isStripPrefix()) {
-					int index = route.getPath().indexOf("*") - 1;
-					if (index > 0) {
-						String routePrefix = route.getPath().substring(0, index);
-						targetPath = targetPath.replaceFirst(routePrefix, "");
-						prefix = prefix + routePrefix;
-					}
-				}
-				if (route.getRetryable() != null) {
-					retryable = route.getRetryable();
-				}
-				break;
-			}
-		}
-		return (location == null ? null : new ProxyRouteSpec(id, targetPath, location,
-				prefix, retryable));
-	}
 
 	public void resetRoutes() {
 		this.routes.set(locateRoutes());
 	}
 
 	protected LinkedHashMap<String, ZuulRoute> locateRoutes() {
-		LinkedHashMap<String, ZuulRoute> routesMap = new LinkedHashMap<String, ZuulRoute>();
+		LinkedHashMap<String, ZuulRoute> routesMap = new LinkedHashMap<>();
 		addConfiguredRoutes(routesMap);
 		routesMap.putAll(this.staticRoutes);
 		if (this.discovery != null) {
-			Map<String, ZuulRoute> staticServices = new LinkedHashMap<String, ZuulRoute>();
+			Map<String, ZuulRoute> staticServices = new LinkedHashMap<>();
 			for (ZuulRoute route : routesMap.values()) {
 				String serviceId = route.getServiceId();
 				if (serviceId == null) {
@@ -205,38 +149,12 @@ public class ProxyRouteLocator implements RouteLocator {
 		return values;
 	}
 
-	protected void addConfiguredRoutes(Map<String, ZuulRoute> routes) {
-		Map<String, ZuulRoute> routeEntries = this.properties.getRoutes();
-		for (ZuulRoute entry : routeEntries.values()) {
-			String route = entry.getPath();
-			if (routes.containsKey(route)) {
-				log.warn("Overwriting route " + route + ": already defined by "
-						+ routes.get(route));
-			}
-			routes.put(route, entry);
-		}
-	}
 
 	public String getTargetPath(String matchingRoute, String requestURI) {
-		String path = getRoutes().get(matchingRoute);
+		String path = getRouteLocations().get(matchingRoute);
 		return (path != null ? path : requestURI);
 
 	}
 
-	@Data
-	@AllArgsConstructor
-	public static class ProxyRouteSpec {
-
-		private String id;
-
-		private String path;
-
-		private String location;
-
-		private String prefix;
-
-		private Boolean retryable;
-
-	}
 
 }

@@ -16,13 +16,39 @@
 
 package org.springframework.cloud.netflix.zuul.filters;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 import java.util.Collection;
+import java.util.Map;
 
 /**
  * @author Dave Syer
  */
 public interface RouteLocator {
+	/**
+	 * Map of paths to locations
+	 * @return
+	 */
+	public Map<String, String> getRouteLocations();
 
 	Collection<String> getRoutePaths();
 
+	public RouteSpec getMatchingRoute(String path);
+
+	@Data
+	@AllArgsConstructor
+	public static class RouteSpec {
+
+		private String id;
+
+		private String path;
+
+		private String location;
+
+		private String prefix;
+
+		private Boolean retryable;
+
+	}
 }

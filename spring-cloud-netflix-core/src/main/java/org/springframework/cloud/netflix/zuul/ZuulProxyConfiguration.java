@@ -17,10 +17,7 @@
 package org.springframework.cloud.netflix.zuul;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.actuate.endpoint.Endpoint;
 import org.springframework.boot.actuate.trace.TraceRepository;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.cloud.client.discovery.event.HeartbeatEvent;
 import org.springframework.cloud.client.discovery.event.HeartbeatMonitor;
@@ -59,14 +56,11 @@ public class ZuulProxyConfiguration extends ZuulConfiguration {
 	@Autowired
 	private ZuulProperties zuulProperties;
 
-	@Autowired
-	private ServerProperties server;
-
 	@Bean
 	@Override
 	public ProxyRouteLocator routeLocator() {
-		return new ProxyRouteLocator(this.server.getServletPrefix(), this.discovery,
-				this.zuulProperties);
+		return new ProxyRouteLocator(this.discovery, this.zuulProperties,
+				this.server.getServletPrefix());
 	}
 
 	// pre filters
@@ -100,21 +94,6 @@ public class ZuulProxyConfiguration extends ZuulConfiguration {
 	@Override
 	public ApplicationListener<ApplicationEvent> zuulRefreshRoutesListener() {
 		return new ZuulRefreshListener();
-	}
-
-	@Configuration
-	@ConditionalOnClass(Endpoint.class)
-	protected static class RoutesEndpointConfiguration {
-
-		@Autowired
-		private ProxyRouteLocator routeLocator;
-
-		@Bean
-		// @RefreshScope
-		public RoutesEndpoint zuulEndpoint() {
-			return new RoutesEndpoint(this.routeLocator);
-		}
-
 	}
 
 	private static class ZuulRefreshListener implements
